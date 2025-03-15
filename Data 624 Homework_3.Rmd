@@ -1,0 +1,483 @@
+---
+title: "Data 624 Homework_3"
+author: "Uliana Plotnikova"
+date: "2025-02-15"
+output:
+  pdf_document:
+     latex_engine: xelatex
+  html_document:
+    theme: darkly
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: yes
+---
+
+
+Do exercises 5.1, 5.2, 5.3, 5.4 and 5.7 in the Hyndman book. 
+
+### Excercise 5.1 
+
+Produce forecasts for the following series using whichever of NAIVE(y), SNAIVE(y) or RW(y ~ drift()) is more appropriate in each case:
+
+ - Australian Population (global_economy)
+ - Bricks (aus_production)
+ - NSW Lambs (aus_livestock)
+ - Household wealth (hh_budget).
+ - Australian takeaway food turnover (aus_retail).
+
+
+```{r,message=FALSE, echo=FALSE,warning=FALSE}
+suppressWarnings(library(highcharter))
+suppressWarnings(library(fpp3))
+suppressWarnings(library(dplyr))
+suppressWarnings(library(Metrics))
+suppressWarnings(library(tidyverse))
+suppressWarnings(library(fable))
+suppressWarnings(library(tsibble))
+suppressWarnings(library(feasts))
+suppressWarnings(library(lubridate))
+```
+
+
+
+
+
+
+#### Australian Population (global_economy)
+
+```{r,warning=FALSE}
+data("global_economy")
+aus_population <- global_economy %>% 
+  filter(Country == "Australia") %>% 
+  select(Year, Population) %>% 
+  as_tsibble(index = Year)
+
+```
+
+
+```{r, fig.align='center'}
+aus_population%>%  autoplot(Population) + 
+  labs(title = "Australian Population",
+       y = "Population",
+       x = "Year")
+```
+
+
+
+
+
+
+```{r,warning=FALSE}
+# Set training data and fit the models
+aus_model_rw <- aus_population %>%
+  model(RW(Population ~ drift()))
+```
+
+To forecast the Australian Population we can use the RW(y~drift()) method as this data exhibits a random walk behavior.
+
+
+```{r,warning=FALSE}
+# Generate forecasts for the next 10 years
+forecasts_rw <- aus_model_rw %>%
+  forecast(h = "10 years")%>% 
+  autoplot(aus_population) + 
+  ggtitle("RW with Drift Forecast for Australian Population")
+forecasts_rw
+```
+
+#### Bricks (aus_production)
+
+```{r,warning=FALSE}
+bricks<-aus_production |>
+    filter(!is.na(Bricks))
+```
+
+```{r,warning=FALSE}
+# Focus on the Bricks series
+bricks_data <- aus_production %>% 
+  select(Quarter, Bricks) %>% 
+  filter(!is.na(Bricks))
+
+# Convert to a tsibble object
+bricks_ts <- bricks_data %>% 
+  tsibble(index = Quarter)
+
+```
+
+```{r, fig.align='center'}
+# Visualize the data
+autoplot(bricks_ts, Bricks) + 
+  labs(title = "Quarterly Clay Brick Production in Australia",
+       y = "Production (millions)",
+       x = "Year")
+```
+
+
+For the Bricks production the SNAIVE method is appropriate because there are seasonal patterns in the quarterly data.
+
+```{r,warning=FALSE}
+bricks_data|>
+  model(SNAIVE(Bricks ~ lag("year"))) %>%
+  forecast(h= 10) %>%
+  autoplot(aus_production)+ 
+  labs(title = "Forecast for Clay Brick Production in Australia",
+       y = "Production (millions)",
+       x = "Year")
+```
+
+#### NSW Lambs (aus_livestock)
+
+
+
+```{r}
+aus_livestock %>%
+  filter(State == "New South Wales", 
+         Animal == "Lambs") %>%
+autoplot() +
+ggtitle("New South Wales Lambs") +
+xlab("Month") +
+ylab("Number of Lambs Slaughtered")
+```
+
+
+
+
+Given the series has a trend and negligible seasonal effects, the RW(y ~ drift()) will fit nthe best. It accounts for the trend by adding a drift term to the random walk.
+
+```{r, warning=FALSE}
+aus_livestock %>%
+filter(State == "New South Wales", 
+Animal == "Lambs") %>%
+model(RW(Count ~ drift())) %>%
+forecast(h = 24) %>%
+autoplot(aus_livestock) +
+labs(title = "Lambs in New South Wales",
+subtitle = "July 1976 - Dec 2018, Forecasted until Dec 2020") +
+xlab("Year") +
+ylab("Number of Lambs Slaughtered")
+```
+
+
+
+
+
+#### Household wealth (hh_budget).
+
+
+
+
+```{r, warning=FALSE}
+wealth <- hh_budget %>%
+  select(Wealth)
+wealth %>%
+  autoplot()+ 
+  labs(title = "Household Wealth")
+```
+
+
+(RW(Wealth ~ drift()) method might be suitable to Forecast for Household Wealth
+
+
+
+```{r,  warning=FALSE}
+# Fit the RW model with drift for household wealth
+ hh_budget %>% 
+  model(RW(Wealth ~ drift())) %>% 
+  forecast(h = "5 years") %>% 
+autoplot(hh_budget) + 
+  labs(title = "Forecast for Household Wealth", y = "Wealth")
+```
+
+
+
+#### Australian takeaway food turnover (aus_retail).
+
+
+```{r,fig.align='center'}
+aus_retail %>%
+  filter(Industry == "Cafes, restaurants and takeaway food services") %>%
+  model(RW(Turnover ~ drift())) %>%
+  forecast(h = 24) %>%
+  autoplot(aus_retail) +
+  labs(title = "Australian takeaway food Turnover",
+       subtitle = "Apr 1982 - Dec 2018, Forecasted until Dec 2020") +
+  facet_wrap(~State, scales = "free")
+```
+
+
+
+### Excercise 5.2
+
+Use the Facebook stock price (data set gafa_stock) to do the following:
+
+ - Produce a time plot of the series.
+ - Produce forecasts using the drift method and plot them.
+ - Show that the forecasts are identical to extending the line drawn between the first and last observations.
+ - Try using some of the other benchmark functions to forecast the same data set. Which do you think is best? Why?
+
+
+a. Time Plot of Facebook Stock Price
+
+```{r}
+fb_stock <- gafa_stock %>%
+filter(Symbol == "FB") %>%
+mutate(Date = as_date(Date))  
+
+# Plot the closing price time series with enhanced ggplot2 theme
+
+fb_stock %>%
+autoplot(Close, colour = "#2C3E50") +
+labs(title = "Facebook Stock Price Over Time",
+x = "Date",
+y = "Closing Price (USD)") +
+theme_minimal()
+
+# Print the dataset structure for verification
+
+print(fb_stock)
+```
+b. Forecast with Drift Method
+```{r}
+# Re-index based on trading days to create a regular tsibble
+
+fb_stock_reg <- fb_stock %>%
+arrange(Date) %>%
+mutate(day = row_number()) %>%
+as_tsibble(index = day, regular = TRUE)
+
+# Fit models using drift-based methods
+
+fb_fit <- fb_stock_reg %>%
+model(`Naive Drift` = NAIVE(Close ~ drift()),
+ `Random Walk` = RW(Close ~ drift()))
+
+# Produce forecasts for next 253 trading days (~1 year)
+
+fb_fc <- fb_fit %>% forecast(h = 253)
+
+# Plot forecasts with historical data overlay
+
+fb_fc %>%
+autoplot(fb_stock_reg, level = NULL) +
+ autolayer(fb_stock_reg, Close, colour = "black") +
+labs(x = "Trading Day",
+y = "Closing Price (USD)",
+title = "Facebook Daily Closing Stock Prices") +
+guides(colour = guide_legend(title = "Forecast")) +
+theme_minimal()
+
+```
+
+
+c. Line Extrapolation with a Dashed Segment
+
+```{r, warning=FALSE}
+fb_plot <- fb_fc %>%
+autoplot(fb_stock_reg, level = NULL) +
+autolayer(fb_stock_reg, Close, colour = "black") +
+labs(x = "Trading Day",
+y = "Closing Price (USD)",
+title = "Facebook Daily Closing Stock Prices") +
+guides(colour = guide_legend(title = "Forecast")) +
+theme_minimal() +
+geom_segment(aes(x = first(fb_stock_reg$day), y = first(fb_stock_reg$Close), 
+xend = last(fb_stock_reg$day), yend = last(fb_stock_reg$Close)),
+linetype = 'dashed', colour = "red", size = 1)
+
+print(fb_plot)
+```
+
+
+
+d. Comparison with Other Benchmark Forecasting Methods
+
+```{r, warning=FALSE}
+# Fit multiple benchmark models
+
+fb_fit_2 <- fb_stock_reg %>%
+ model(Mean  = MEAN(Close),
+Naive = NAIVE(Close),
+`Seasonal Naive` = SNAIVE(Close, period = 5),  # assuming weekly seasonality on trading days
+`Random Walk` = RW(Close))
+
+# Produce forecasts for the next 253 trading days
+
+fb_fc_2 <- fb_fit_2 %>% forecast(h = 253)
+
+# Plot forecast comparison from different models
+
+fb_fc_2 %>%
+autoplot(fb_stock_reg, level = NULL) +
+autolayer(fb_stock_reg, Close, colour = "black") +
+labs(x = "Trading Day",
+y = "Closing Price (USD)",
+title = "Facebook Daily Closing Stock Prices - Benchmark Forecasts") +
+guides(colour = guide_legend(title = "Forecast")) + theme_minimal()
+```
+
+Suggested best model: Among the benchmark forecasts, inspection of residuals, forecast accuracy measures (e.g., MAE, RMSE) and the overall fit to the historical trend suggests that the `Random Walk with drift` model performs best for this data.
+
+
+
+
+### Excercise 5.3
+
+Apply a seasonal naive method to the quarterly Australian beer production data from 1992. Check if the residuals look like white noise, and plot the forecasts. The following code will help.
+
+
+
+```{r, warning=FALSE}
+# Extract data of interest
+recent_production <- aus_production |>
+  filter(year(Quarter) >= 1992)
+# Define and estimate a model
+fit <- recent_production |> model(SNAIVE(Beer))
+# Look at the residuals
+fit |> gg_tsresiduals()
+# Look a some forecasts
+fit |> forecast() |> autoplot(recent_production)
+
+```
+
+
+
+The residuals seem to resemble white noise, indicating that the model has successfully captured the seasonal patterns. The forecast plot shows the same seasonal trends as in the historical data.
+
+### Excercise 5.4
+
+
+Repeat the previous exercise using the Australian Exports series from global_economy and the Bricks series from aus_production. Use whichever of NAIVE() or SNAIVE() is more appropriate in each case.
+
+For the Australian Exports series we will use the NAIVE() method because the data are annual. 
+
+
+
+
+```{r,warning=FALSE}
+aus_exports <- global_economy %>% 
+filter(Country == "Australia") %>% 
+select(Year, Exports)
+
+```
+
+```{r,warning=FALSE}
+fit_exports <- aus_exports %>%
+model(NAIVE(Exports))
+fc_exports <- fit_exports %>% forecast(h = 5)
+fit_exports %>% gg_tsresiduals()
+```
+
+```{r}
+fc_exports %>% autoplot(aus_exports) +
+ggtitle("Forecasts for Australian Exports (NAIVE)")
+```
+
+
+
+
+
+For the Bricks series SNAIVE() method is more appropriate because the data have a seasonal pattern.
+
+
+
+
+```{r,warning=FALSE}
+aus_bricks <- aus_production %>%
+  select(c(Quarter, Bricks)) %>%
+  na.omit()
+
+
+fit <- aus_bricks %>%
+  model(SNAIVE(Bricks))
+
+fit %>%
+  gg_tsresiduals()
+
+fit %>%
+  forecast() %>%
+  autoplot(aus_bricks)+
+ggtitle("Forecasts for Bricks (SNAIVE)")
+```
+
+### Excercise 5.7
+
+
+For your retail time series (from Exercise 7 in Section 2.10):
+
+
+
+a. Create a training dataset consisting of observations before 2011 using
+```{r,warning=FALSE}
+set.seed(32)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+myseries_train <- myseries |>
+  filter(year(Month) < 2011)
+```
+
+b. Check that your data have been split appropriately by producing the following plot.
+
+```{r,warning=FALSE}
+autoplot(myseries, Turnover) +
+autolayer(myseries_train, Turnover, colour = "red")+
+labs(title = "Turnover Over Time")
+```
+
+c. Fit a seasonal naïve model using SNAIVE() applied to your training data (myseries_train).
+
+```{r,warning=FALSE}
+fit <- myseries_train |>
+  model(SNAIVE(Turnover))
+```
+
+d. Check the residuals.
+```{r, warning=FALSE}
+fit |> gg_tsresiduals()
+```
+The residuals don’t look normal or uncorrelated at all. The autocorrelation plot is way outside the limits, and the residuals are showing heteroscedasticity.
+
+e. Produce forecasts for the test data
+
+```{r,warning=FALSE}
+fc <- fit |> 
+forecast(new_data = anti_join(myseries, myseries_train, by = "Month"))
+autoplot(myseries, Turnover) +
+autolayer(fc, colour = "blue")
+```
+ 
+ 
+ Upon analyzing the plotted forecasts, it appears that the model lacks predictive accuracy. The test data set is observed to extend beyond the limits of the 95% confidence level in various areas.
+
+f. Compare the accuracy of your forecasts against the actual values.
+
+```{r}
+#fit |> accuracy()
+```
+**Training Data Accuracy**
+
+```{r, echo=FALSE}
+knitr::include_graphics("/Users/ulianaplotnikova/Desktop/DATA624/tr.png")
+```
+
+
+
+
+
+```{r}
+#fc |> accuracy(myseries)
+```
+**Test Data Accuracy**
+
+```{r, echo=FALSE}
+knitr::include_graphics("/Users/ulianaplotnikova/Desktop/DATA624/test.png")
+
+```
+
+A lower value for each metric generally indicates better accuracy.  Looking at the provided data the model's accuracy is lower on the test set than on the training set, as indicated by higher values across all accuracy metrics. This suggests potential overfitting to the training data.
+
+
+**How sensitive are the accuracy measures to the amount of training data used?**
+
+
+Generally, a lower metric value reflects enhanced accuracy. Since the metrics are all higher in the test set, the model's accuracy is inferior on the test set relative to the training set. This points to a potential overfitting issue with the model regarding the training data. Overfitting implies that the model is excessively learning from the training data and failing to generalize effectively to the test set. The provided data does not specifically address how accuracy measures respond to the quantity of training data. More data would be helpful for a comprehensive assessment.
