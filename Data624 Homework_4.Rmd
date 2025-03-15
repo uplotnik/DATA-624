@@ -1,0 +1,258 @@
+---
+title: "Data 624 Homework_4"
+author: "Uliana Plotnikova"
+date: "2025-03-01"
+output:
+  html_document:
+    theme: darkly
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: yes
+  pdf_document:
+     latex_engine: xelatex
+---
+
+
+## Exercise 3.1
+
+The UC Irvine Machine Learning Repository6 contains a data set related to glass identification. The data consist of 214 glass samples labeled as one of seven class categories. There are nine predictors, including the refractive index and percentages of eight elements: Na, Mg, Al, Si, K, Ca, Ba, and Fe.
+Excersize 1
+
+
+
+```{r,warning=FALSE, message=FALSE}
+library(mlbench)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+data(Glass)
+str(Glass)
+
+```
+
+**a. Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.**
+
+```{r,warning=FALSE}
+par(mfrow = c(3, 3)) 
+for(i in 1:9) {
+hist(Glass[, i], 
+main = paste("Histogram of", names(Glass)[i]), 
+xlab = names(Glass)[i], 
+col = "lightblue")
+}
+```
+
+
+
+The histograms reveal different patterns of concentration distributions for each element, with some elements showing symmetrical distributions and others exhibiting skewness.
+
+
+
+
+```{r}
+# Boxplots for each variable
+par(mfrow = c(3, 3))  # Reset plotting layout
+for(i in 1:9) {
+boxplot(Glass[, i], 
+main = paste("Boxplot of", names(Glass)[i]), 
+xlab = names(Glass)[i], 
+col = "lightgreen")
+}
+```
+
+
+```{r}
+pairs(Glass[, 1:9],
+main = "Scatterplot Matrix of Predictors",
+col = as.factor(Glass$type))
+```
+
+
+
+
+This matrix illustrates the relationships among different variables, which are represented along the axes: Fe, Ba, Ca, K, Si, Al, Mg, Na, and RI. Each cell in the matrix features a scatterplot that demonstrates the correlation between two variables. The values along the axes correspond to the measurements of these variables. This matrix is utilized to visualize correlations among multiple variables simultaneously. For instance, the cell at the intersection of "Fe" and "Ba" displays a scatterplot of Fe values plotted against Ba values, allowing for a visual assessment of their correlation. The empty cells indicate that the relevant scatterplots are not included in this matrix. Overall, the matrix is a significant tool for exploratory
+
+```{r, warning =FALSE}
+cor_mat <- cor(Glass[, 1:9])
+melted_cor <- melt(cor_mat)
+ggplot(melted_cor, aes(Var1, Var2, fill = value)) + 
+geom_tile() +
+scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+midpoint = 0, limit = c(-1, 1), space = "Lab", 
+name = "Correlation") +
+theme_minimal() +
+theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+size = 12, hjust = 1)) +
+coord_fixed() +
+ggtitle("Correlation Heatmap of Predictors")
+```
+```{r,warning=FALSE, message=FALSE}
+#Enhanced pairwise plot using GGally
+library(GGally)
+ggpairs(Glass, columns = 1:9, 
+aes(color = type), data = Glass) + 
+ggtitle("GGpairs: Pairwise Plot of Predictors")
+```
+
+The pairwise plot visualizes the relationships between all pairs of predictors in the glass dataset, showing correlations and distributions to aid in understanding data structure and potential multicollinearity. 
+
+
+**b. Do there appear to be any outliers in the data? Are any predictors skewed?**
+
+
+Yes, several predictors are skewed.  `RI`, `Mg`, `Al`, `Si`, `K`, `Ca`, `Ba`, and `Fe` show significant skewness.  Na shows mild skewness.
+
+```{r}
+#Check skewness
+Glass %>%
+summarize(across(where(is.numeric), 
+list(skewness = ~ moments::skewness(.x, na.rm = TRUE))))
+```
+**c. Are there any relevant transformations of one or more predictors that might improve the classification model?**
+
+There are several transformations that can be applied to the predictors to improve the classification model, especially when dealing with skewed data. 
+For positively skewed `RI`, `K`, `Ca`, `Ba`, and `Fe`  logarithmic transformation `log(X)` or the square root `sqrt(X)` can be helpful.
+For negatively skewed `Mg` the inverse power transformation `1/X` can help.
+
+```{r}
+par(mfrow = c(3, 2), mar = c(4, 3, 3, 1) + 0.1)
+trans_vars <- c("RI", "K", "Ca", "Ba", "Fe")
+for(var in trans_vars) {
+Glass[[paste0("log_", var)]] <- log(Glass[[var]])
+Glass[[paste0("sqrt_", var)]] <- sqrt(Glass[[var]])
+}
+
+
+# Visualize the transformed variables 
+
+for(var in trans_vars) {
+ hist(Glass[[paste0("log_", var)]],
+ main = paste("Histogram of log(", var, ")", sep = ""),
+xlab = paste("log(", var, ")", sep = ""),
+col = "lightgreen")
+
+  # Histogram for square root transformation
+
+hist(Glass[[paste0("sqrt_", var)]],
+main = paste("Histogram of sqrt(", var, ")", sep = ""),
+xlab = paste("sqrt(", var, ")", sep = ""),
+col = "lightcoral")
+
+}
+```
+
+## Exercise 3.2
+
+The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmental conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes.
+
+The data can be loaded via:
+
+```{r}
+library(mlbench)
+data(Soybean)
+```
+
+
+
+
+
+
+```{r, message=FALSE}
+predictor_names <- setdiff(names(Soybean), "Class")
+
+for(name in predictor_names) {
+
+  cat("\nFrequency for", name, ":\n")
+
+  print(table(Soybean[[name]], useNA = "ifany"))
+
+}
+```
+
+
+```{r, fig.align='center'}
+par(mfrow=c(2,2))
+
+for(name in predictor_names) {  # Plotting the first 4 predictors for demonstration
+
+  counts <- table(Soybean[[name]])
+
+  barplot(counts, main=paste("Distribution of", name), col="skyblue")
+
+}
+```
+
+
+**b. Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?**
+
+
+```{r}
+#Check the missing data 
+sum(is.na(Soybean))
+```
+
+
+
+```{r}
+# Calculate missing data per variable
+
+missing_counts <- sapply(Soybean, function(x) sum(is.na(x)))
+
+missing_percentages <- missing_counts / nrow(Soybean)*100
+
+print(missing_percentages)
+```
+The highest likelihood of missing data - with over 17% of the data missing is in `hail`, `sever`, `seed.tmt` and `lodging`.
+
+
+```{r}
+#Investigate missing data by class for 4 predictors (as an example)
+example_predictor <- predictor_names[4]
+
+print(table(Soybean$Class, is.na(Soybean[[example_predictor]])))
+```
+
+
+**c. Develop a strategy for handling missing data, either by eliminating predictors or imputation.**
+
+We can use simple approach of imputation using the mode
+
+
+```{r}
+# Function to impute mode
+
+impute_mode <- function(x) {
+if(any(is.na(x))) {
+ mode_val <- names(sort(table(x), decreasing = TRUE))[1]
+x[is.na(x)] <- mode_val
+}
+return(x)
+
+}
+```
+
+
+
+```{r}
+Soybean_imputed <- Soybean
+for(name in predictor_names) {
+ Soybean_imputed[[name]] <- impute_mode(Soybean_imputed[[name]])
+
+}
+```
+
+
+```{r}
+#Check if missing data remains after imputation
+sum(is.na(Soybean_imputed))
+```
+
+```{r}
+par(mfrow=c(1,2))
+
+barplot(table(Soybean[[example_predictor]], useNA = "ifany"), main = "Before Imputation", col="tomato")
+
+barplot(table(Soybean_imputed[[example_predictor]], useNA = "ifany"), main = "After Imputation", col="seagreen")
+```
+

@@ -1,0 +1,527 @@
+---
+title: "Data 624 HW 5"
+author: "Uliana Plotnikova"
+date: "2025-03-02"
+output:
+  pdf_document:
+     latex_engine: xelatex
+  html_document:
+    theme: darkly
+    code_folding: hide
+    toc: yes
+    toc_float:
+      collapsed: yes
+---
+
+Do exercises 8.1, 8.5, 8.6, 8.7, 8.8, 8.9  in Hyndman. 
+
+
+## 8.1 
+
+Consider the the number of pigs slaughtered in Victoria, available in the aus_livestock dataset.
+
+
+
+```{r, warning=FALSE, message=FALSE}
+suppressWarnings(library(tsibble))
+suppressWarnings(library(fpp3))
+suppressWarnings(library(fable))
+suppressWarnings(library(ggplot2))
+suppressWarnings(library(dplyr))
+
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+aus_livestock_vic_pigs <- aus_livestock %>%
+  filter(State == "Victoria",
+         Animal == "Pigs")
+# Plot the time series.
+plot<- aus_livestock_vic_pigs %>%
+  autoplot(Count) +
+  labs(title = 'Pigs Slaughtered in Victoria Timeseries')
+plot
+```
+
+**Use the ETS() function to estimate the equivalent model for simple exponential smoothing. Find the optimal values of α and ℓ0, and generate forecasts for the next four months.**
+
+
+```{r, warning=FALSE, message=FALSE}
+fit <- aus_livestock_vic_pigs %>%
+  model(ETS(Count ~ error("A") + trend("N") + season("N")))
+
+fit_report <- report(fit)
+print(fit_report)
+```
+The optimal values: `𝛼`= 0.3221247. `ℓ0`= 100646.6
+
+**Generate forecasts for the next four months.**
+
+```{r, warning=FALSE, message=FALSE}
+fc <- fit %>%
+  forecast(h = 4)
+
+print(fc)
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+fc%>% autoplot(aus_livestock_vic_pigs) +
+  ggtitle("Number of Pigs Slaughtered in Victoria") +
+  xlab("Month") +
+  ylab("Number of Pigs Slaughtered")
+```
+
+**b.Compute a 95% prediction interval for the first forecast using ^y±1.96s  where  s is the standard deviation of the residuals.**
+
+```{r}
+
+Mean <- 95186.56
+SD <- sqrt(87480760)
+
+```
+
+
+```{r}
+
+lower_level <- Mean - 1.96 * SD
+upper_level <- Mean + 1.96 * SD
+paste(lower_level,upper_level)%>% head(1)
+```
+
+
+The 95% prediction interval for the first forecast is from 76854 to 113518.
+
+**Compare your interval with the interval produced by R:**
+
+```{r}
+fc %>% hilo(95) %>% 
+  pull('95%') %>% head(1)
+```
+
+
+
+
+
+
+## 8.5 
+
+Data set global_economy contains the annual Exports from many countries. Select one country to analyse.
+
+**(a) Plot the Exports series and discuss the main features of the data.**
+
+
+
+
+```{r}
+# Load necessary libraries
+library(tsibble)
+library(fable)
+library(ggplot2)
+library(fabletools)
+
+# Assume 'global_economy' data set is already loaded
+# Filter data for Australia
+Australia_exports <- global_economy %>%
+  filter(Country == "Australia") %>%
+  select(Country, Year, Exports)
+
+# Convert to tsibble
+Australia_exports_tsibble <- as_tsibble(Australia_exports, index = Year)
+
+# Plot the Exports series
+ggplot(Australia_exports_tsibble, aes(x = Year, y = Exports)) +
+  geom_line(colour = "blue") +
+  labs(title = "Annual Exports of Australia", x = "Year", y = "Exports (in USD)") +
+  theme_minimal()
+```
+
+When plotting the Exports series, we might observe the following features:
+
+The graph shows an increasing trend in the annual exports of Australia between 1960 and 2000. The overall direction of the graph is upwards, indicating that exports have generally increased over this period.
+
+ 
+
+
+
+
+
+
+**(b) Use an ETS(A,N,N) model to forecast the series, and plot the forecasts.**
+
+```{r}
+# Fit ETS(A,N,N) model
+ets_ann <- Australia_exports_tsibble %>% 
+  model(ETS(Exports ~ error("A") + trend("N") + season("N")))
+
+# Generate forecasts for the next 5 years
+ets_ann_forecast <- ets_ann %>% forecast(h = 5)
+
+ets_ann_forecast %>% autoplot(Australia_exports) +
+  labs(title = 'ANN MODEL: Australia Annual Exports Forecast')
+```
+```{r}
+report(ets_ann)
+```
+
+
+**(c) Compute the RMSE values for the training data.**
+```{r}
+accuracy(ets_ann)
+```
+The RMSE value for the training data is 1.146794	
+
+**(d) Compare the results to those from an ETS(A,A,N) model. (Remember that the trended model is using one more parameter than the simpler model.) Discuss the merits of the two forecasting methods for this data set.**
+
+```{r}
+# Fit ETS(A,A,N) model
+ets_aan <- Australia_exports_tsibble %>% 
+  model(ETS(Exports ~ error("A") + trend("A") + season("N")))
+
+# Generate forecasts for the next 5 years
+ets_aan_forecast <- ets_aan %>% forecast(h = 5)
+
+ets_aan_forecast %>% autoplot(Australia_exports) +
+  labs(title = 'AAN MODEL: Australia Annual Exports Forecast')
+```
+
+
+
+```{r}
+modelComparison <- Australia_exports %>%
+  model(
+    ANN = ETS(Exports ~ error('A') + trend('N') + season('N')),
+    AAN = ETS(Exports ~ error('A') + trend('A') + season('N'))
+  )
+
+accuracy(modelComparison)
+```
+The table shows that the ANN model has a slightly lower RMSE (1.146794) and MAE (0.9135835) compared to the AAN model (1.116727 and 0.8926420 respectively).  
+Usually, if RMSE is lower, we can say that the model fits the best. In this case, both models provide a reasonably good fit to the data, since the difference between the metrics is relatively small.
+
+
+**(e) Compare the forecasts from both methods. Which do you think is best?**
+
+```{r}
+modelComparison %>%
+  forecast(h = 4) %>%
+  autoplot(Australia_exports, level = NULL) +
+  labs(title = 'Australia Annual Exports ANN Vs AAN Forecast Model Comparison')
+```
+
+Although it's hard to say which model is better, I assume the AAN model appears slightly better due to it's greater stability.
+
+
+**(f) Calculate a 95% prediction interval for the first forecast for each model, using the RMSE values and assuming normal errors. Compare your intervals with those produced using R.**
+
+
+
+**ANN**
+
+```{r}
+standardDeviation <- modelComparison %>%
+  select(Country, ANN) %>%
+  accuracy() %>%
+  transmute(Country, standardDeviation = RMSE)
+standardDeviation
+```
+
+
+```{r}
+modelComparison %>%
+  select(Country, ANN) %>%
+  forecast(h = 1) %>%
+  left_join(standardDeviation, by = 'Country') %>%
+  mutate(lowerCi = Exports - 1.96 * standardDeviation,
+         upperCi = Exports + 1.96 * standardDeviation) %>%
+  select(Country, Exports, lowerCi, upperCi)
+```
+
+```{r}
+ets_ann_forecast %>% hilo(95) %>% pull('95%') %>% head(1)
+```
+
+
+**AAN**
+
+
+
+```{r}
+standardDeviation <- modelComparison %>%
+  select(Country, AAN) %>%
+  accuracy() %>%
+  transmute(Country, standardDeviation = RMSE)
+standardDeviation
+
+```
+
+
+
+
+```{r}
+modelComparison %>%
+  select(Country, AAN) %>%
+  forecast(h = 1) %>%
+  left_join(standardDeviation, by = 'Country') %>%
+  mutate(lowerCi = Exports - 1.96 * standardDeviation,
+         upperCi = Exports + 1.96 * standardDeviation) %>%
+  select(Country, Exports, lowerCi, upperCi)
+```
+
+
+```{r}
+##interval produced by R:**
+ets_aan_forecast %>% hilo(95) %>% pull('95%') %>% head(1)
+```
+
+The interval computed by R using hilo() is a slightly larger interval compared to the others. 
+
+
+
+## 8.6
+
+Forecast the Chinese GDP from the global_economy data set using an ETS model. Experiment with the various options in the ETS() function to see how much the forecasts change with damped trend, or with a Box-Cox transformation. Try to develop an intuition of what each is doing to the forecasts.
+
+[Hint: use a relatively large value of h when forecasting, so you can clearly see the differences between the various options when plotting the forecasts.]
+
+
+
+
+```{r}
+Chana_GDP <- global_economy %>% 
+filter(Country == "China")
+
+```
+
+```{r}
+# Estimate the optimal Box-Cox transformation parameter using Guerrero's method.
+
+box_cox_lambda <- Chana_GDP %>%
+features(GDP, features = guerrero) %>%
+pull(lambda_guerrero)
+```
+
+```{r}
+# Compare different ETS() models
+
+ets_model_comparison <- Chana_GDP %>%
+model(
+ETS_Basic = ETS(GDP),
+ETS_Transformed = ETS(box_cox(GDP, box_cox_lambda)),
+ETS_DampedTrend = ETS(GDP ~ trend('A', phi = 0.7)),
+ ETS_LogTransformed = ETS(log(GDP))
+
+  )
+
+# Generate forecasts and visualize the results using ggplot2.
+
+ets_model_comparison %>%
+forecast(h = 30) %>%
+autoplot(Chana_GDP, level = NULL) +
+labs(title = 'China GDP Forecasts: A Comparison of ETS Models') +
+scale_color_manual(values = c("ETS_Basic" = "blue", "ETS_Transformed" = "red", "ETS_DampedTrend" = "green", "ETS_LogTransformed" = "purple")) + 
+theme_minimal() 
+```
+
+
+## 8.7 
+
+Find an ETS model for the Gas data from `aus_production` and forecast the next few years. Why is multiplicative seasonality necessary here? Experiment with making the trend damped. Does it improve the forecasts?
+
+
+```{r}
+aus_production %>%
+autoplot(Gas) +
+labs(
+title = "Australian Gas Production",
+ylab = "Production (Billions of Cubic Feet)",
+xlab = "Quarter"
+ ) +
+theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+fit_model <- aus_production %>%
+model(
+    `Additive` = ETS(Gas ~ error("A") + trend("A") + season("A")),
+    `Multiplicative` = ETS(Gas ~ error("M") + trend("A") + season("M")) )
+fc <- fit_model %>%
+forecast(h=30)
+autoplot(fc, aus_production, level = NULL) +
+labs(title="Australian Gas Production",
+subtitle="Additive vs. Multiplicative Seasonality") +
+guides(colour = guide_legend(title = "Forecast"))
+```
+
+Multiplicative forecast shows slightly larger fluctuations than the additive forecast.
+
+```{r}
+fit_model <- aus_production %>%
+model(
+    `Multiplicative` = ETS(Gas ~ error("M") + trend("A") + season("M")),
+    `Damped Multiplicative` = ETS(Gas ~ error("M") + trend("Ad", phi = 0.9) + season("M"))
+  )
+
+fc <- fit_model %>%
+forecast(h=30)
+autoplot(fc, aus_production, level = NULL) +
+labs(title="Australian Gas Production",
+subtitle="Multiplicative vs. Damped Multiplicative Seasonality") +
+ guides(colour = guide_legend(title = "Forecast"))
+```
+ Multiplicative seasonality is essential because the seasonal fluctuations increase over time.
+ It looks like dumped multiplicative model provides a better forecast than the multiplicative model for this dataset. Damped Multiplicative model shows smoother and less volatile prediction of future production.
+
+
+## 8.8 
+
+**Recall your retail time series data (from Exercise 7 in Section 2.10).**
+
+   **Why is multiplicative seasonality necessary for this series?**
+    
+```{r}
+set.seed(12345678)
+myseries <- aus_retail |>
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+myseries %>% autoplot(Turnover)+
+labs(title="Monthly Australian retail data") 
+```
+    
+    
+    
+Multiplicative seasonality is necessary because the amplitude of seasonal fluctuations increases with the level of the time series.
+    
+    
+    
+**Apply Holt-Winters’ multiplicative method to the data. Experiment with making the trend damped.**
+    
+    
+    
+    
+      
+```{r}
+fit_model <- myseries %>%
+  model(
+    'Holt Winters Multiplicative Method' = ETS(Turnover ~ error('M') + trend('A') + season('M')),
+    'Holt Winters Damped Method' = ETS(Turnover ~ error('M') + trend('Ad') + season('M'))
+  )
+
+fc <- fit_model %>% forecast(h = 20)
+
+fc %>% autoplot(myseries, level = NULL)+
+labs(title="Monthly Australian retail data",
+subtitle="Holt Winters Multiplicative Method vs. Holt Winters Damped Method") +
+guides(colour = guide_legend(title = "Forecast"))
+```
+    
+    
+**Compare the RMSE of the one-step forecasts from the two methods. Which do you prefer?**
+```{r}
+compare_accuracy<-accuracy(fit_model) %>% select('.model', 'RMSE')
+compare_accuracy
+```
+    
+    
+The preferred method will be the one with the lower RMSE value, which is Holt Winters Multiplicative Method in our case
+
+    
+**Check that the residuals from the best method look like white noise.**
+    
+```{r}
+fit_model %>%
+  select('Holt Winters Multiplicative Method') %>%
+  gg_tsresiduals()
+```
+
+
+Since the autocorrelation values on the ACF plot remain inside the confidence intervals, it suggests minimal significant autocorrelation.
+The histogram displays a near-normal distribution which positions its central point at zero.
+The residual plot displays a random distribution of points around zero without any visible patterns. 
+
+Overall, based on the ACF plot, histogram, and residual plot, the residuals appear to be consistent with white noise.  This suggests that the Holt-Winters Multiplicative Method is a good fit for the data.
+  
+**Now find the test set RMSE, while training the model to the end of 2010. Can you beat the seasonal naïve approach from Exercise 7 in Section 5.11?**
+
+```{r}
+# Define a function to create the models and forecast
+forecast_turnover <- function(data, train_end_year) {
+
+  # Create training data
+  train_data <- data %>%
+    filter(year(Month) < train_end_year)
+
+  # Fit the models
+  fit_models <- train_data %>%
+    model(
+      'Holt Winters Multiplicative' = ETS(Turnover ~ error("M") + trend("A") + season("M")),
+      'Holt Winters Damped' = ETS(Turnover ~ error("M") + trend("Ad") + season("M")),
+      'Seasonal Naive' = SNAIVE(Turnover)
+    )
+
+  # Create comparison data  
+  comparison_data <- anti_join(data, train_data, by = c("State", "Industry", "Series ID", "Month", "Turnover"))
+
+  # Forecast using the fitted models
+  forecasts <- fit_models %>% forecast(comparison_data)
+
+  # Return the comparison data, forecasts, and fit_models
+  return(list(comparison_data = comparison_data, forecasts = forecasts, fit_models = fit_models))
+}
+
+# Apply the function
+forecast_output <- forecast_turnover(myseries, 2011)
+comparison_data <- forecast_output$comparison_data
+forecasts <- forecast_output$forecasts
+fit_models <- forecast_output$fit_models
+
+# Visualize the forecasts
+autoplot(comparison_data, Turnover) +
+  autolayer(forecasts, level = NULL) +
+  labs(title = "Turnover Forecast Comparison")
+
+# Calculate accuracy metrics using the fit_models object
+accuracy(fit_models) %>%
+  select(.type, .model, RMSE)
+```
+
+
+I was able to beat Seasonal Naive approach, since it has the highest RMSE. The best method for forecasting turnover appears to be the Holt-Winters Multiplicative method.
+
+## 8.9
+
+
+For the same retail data, try an STL decomposition applied to the Box-Cox transformed series, followed by ETS on the seasonally adjusted data. How does that compare with your best previous forecasts on the test set?
+
+
+```{r}
+myseries_retail<- myseries %>%
+  filter(year(Month) < 2011)
+
+lambda <- myseries_retail %>%
+  features(Turnover, features = guerrero) %>%
+  pull(lambda_guerrero)
+ts_bc <- myseries_retail %>%
+  mutate(
+    bc = box_cox(Turnover, lambda)
+  )
+
+bc_fit <- ts_bc %>%
+  model(
+    'STL (BoxCox)' = STL(bc ~ season(window = "periodic"),
+                         robust = T),
+    'ETS (BoxCox)' = ETS(bc)
+  )
+
+bc_fit_opt <-ts_bc %>%
+  model(
+    "Holt-Winters' Multiplicative" = ETS(Turnover ~ error("M") + 
+                                           trend("A") +
+                                           season("M"))
+  )
+
+rbind(accuracy(bc_fit),accuracy(bc_fit_opt))
+```
+
+Now It looks like Holt-Winters' Multiplicative shows the highest RMSE compare to other models.
